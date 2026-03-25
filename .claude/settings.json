@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Edit(/Users/ashish-10325/Projects/Claude/pdf-cli-reader/**)",
+      "Write(/Users/ashish-10325/Projects/Claude/pdf-cli-reader/**)",
+      "Bash(/Users/ashish-10325/Projects/Claude/pdf-cli-reader/**)",
+      "Bash(.venv/**)",
+      "Bash(python*)",
+      "Bash(pytest*)"
+    ]
+  }
+}
