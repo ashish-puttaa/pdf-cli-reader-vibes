@@ -542,7 +542,7 @@ def _progress_bar(current, total, width=36):
     filled = int(width * pct)
     return "█" * filled + "░" * (width - filled)
 
-def _render_header(book_title, chapter, page_num, total, pos, set_size, search_query, search_results, page_label=None):
+def _render_header(book_title, chapter, page_num, total, pos, set_size, search_query, search_results):
     """Structured header: title · chapter on line 1, progress bar on line 2."""
     body = Text()
 
@@ -558,9 +558,8 @@ def _render_header(book_title, chapter, page_num, total, pos, set_size, search_q
     bar_width = max(20, min(40, console.width - 40))
     bar = _progress_bar(page_num, total, bar_width)
     pct = int(page_num / total * 100) if total else 0
-    display_page = page_label if page_label else str(page_num)
     body.append(f"  {bar}", style="dodger_blue2")       # blue was ~2.6:1; dodger_blue2 ~4.5:1
-    body.append(f"  Page {display_page} / {total}", style="bold")
+    body.append(f"  Page {page_num} / {total}", style="bold")
     body.append(f"  {pct}%", style="dim")
     if set_size != total:
         body.append(f"  [{pos + 1} of {set_size} selected]", style="dim")
@@ -629,13 +628,11 @@ def _interactive(doc, pdf_path, page_indices, total, ocr, ocr_threshold, can_sho
         console.clear()
 
         # ── header ───────────────────────────────────────────────────────────
-        page_label = doc[i].get_label() or None
         console.print(_render_header(
             book_title, chapter,
             page_num=i + 1, total=total,
             pos=pos, set_size=len(page_indices),
             search_query=search_query, search_results=search_results,
-            page_label=page_label,
         ))
 
         # ── content ──────────────────────────────────────────────────────────
@@ -778,7 +775,6 @@ def _interactive(doc, pdf_path, page_indices, total, ocr, ocr_threshold, can_sho
                     page_num=i + 1, total=total,
                     pos=pos, set_size=len(page_indices),
                     search_query=search_query, search_results=search_results,
-                    page_label=page_label,
                 ))
                 with Live(Spinner("dots", text=" Rendering…"), console=console, transient=True):
                     img_bytes = content if ctype == "image" else render_page_image(doc[i])
