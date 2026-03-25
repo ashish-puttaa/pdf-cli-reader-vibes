@@ -227,6 +227,12 @@ def styled_page_text(page):
                 raw = span["text"]
                 if not raw.strip() or span["size"] < 1 or not _is_readable(raw):
                     continue
+                # Strip non-printable chars (e.g. \x03 ETX used as word separators
+                # in diagram label fonts).  They pass _is_readable as a minority
+                # but render as circles/boxes in the terminal.
+                raw = ''.join(c for c in raw if c.isprintable())
+                if not raw.strip():
+                    continue
                 size  = round(span["size"])
                 flags = span["flags"]   # 1=super, 2=italic, 4=serif, 8=mono, 16=bold
                 font  = span["font"].lower()
@@ -536,7 +542,7 @@ def _progress_bar(current, total, width=36):
     filled = int(width * pct)
     return "█" * filled + "░" * (width - filled)
 
-def _render_header(book_title, chapter, page_num, total, pos, set_size, search_query, search_results):
+def _render_header(book_title, chapter, page_num, total, pos, set_size, search_query, search_results, page_label=None):
     """Structured header: title · chapter on line 1, progress bar on line 2."""
     body = Text()
 
@@ -552,8 +558,9 @@ def _render_header(book_title, chapter, page_num, total, pos, set_size, search_q
     bar_width = max(20, min(40, console.width - 40))
     bar = _progress_bar(page_num, total, bar_width)
     pct = int(page_num / total * 100) if total else 0
+    display_page = page_label if page_label else str(page_num)
     body.append(f"  {bar}", style="dodger_blue2")       # blue was ~2.6:1; dodger_blue2 ~4.5:1
-    body.append(f"  Page {page_num} / {total}", style="bold")
+    body.append(f"  Page {display_page} / {total}", style="bold")
     body.append(f"  {pct}%", style="dim")
     if set_size != total:
         body.append(f"  [{pos + 1} of {set_size} selected]", style="dim")
@@ -581,8 +588,8 @@ def _render_footer(has_toc, has_search, search_active, is_image_page=False):
     items.append(("/", "search"))
     if has_search:
         items.append(("n/N", "match"))
-    if is_image_page:
-        items.append(("v", "open in Preview"))
+    items.append(("i", "image view"))
+    items.append(("v", "open in Preview"))
     items.append(("q", "quit"))
 
     row = Text()
@@ -622,11 +629,13 @@ def _interactive(doc, pdf_path, page_indices, total, ocr, ocr_threshold, can_sho
         console.clear()
 
         # ── header ───────────────────────────────────────────────────────────
+        page_label = doc[i].get_label() or None
         console.print(_render_header(
             book_title, chapter,
             page_num=i + 1, total=total,
             pos=pos, set_size=len(page_indices),
             search_query=search_query, search_results=search_results,
+            page_label=page_label,
         ))
 
         # ── content ──────────────────────────────────────────────────────────
@@ -753,13 +762,30 @@ def _interactive(doc, pdf_path, page_indices, total, ocr, ocr_threshold, can_sho
 
             # Open current page in system viewer (macOS Preview)
             elif ch == "v":
-                if ctype == "image":
-                    import tempfile, subprocess
-                    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tf:
-                        tf.write(content)
-                        tf.flush()
-                        subprocess.Popen(["open", tf.name])
+                import tempfile, subprocess
+                png = content if ctype == "image" else render_page_image(doc[i])
+                with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tf:
+                    tf.write(png)
+                    tf.flush()
+                    subprocess.Popen(["open", tf.name])
                 # no break — stay on same page
+
+            # Inline image view of the current page
+            elif ch == "i":
+                console.clear()
+                console.print(_render_header(
+                    book_title, chapter,
+                    page_num=i + 1, total=total,
+                    pos=pos, set_size=len(page_indices),
+                    search_query=search_query, search_results=search_results,
+                    page_label=page_label,
+                ))
+                with Live(Spinner("dots", text=" Rendering…"), console=console, transient=True):
+                    img_bytes = content if ctype == "image" else render_page_image(doc[i])
+                display_image(img_bytes)
+                console.print("\n   [dim]Viewing page as image. Press any key to return.[/dim]")
+                click.getchar()
+                break  # redisplay the page in normal mode
 
             # Quit
             elif ch in ("q", "\x03"):
