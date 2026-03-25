@@ -8,6 +8,7 @@ A Mac CLI PDF reader with styled text, inline images, full-text search, interact
 
 - **Styled text rendering** — headings, bold, italic, and monospaced/code blocks are detected from PDF font metadata and rendered with appropriate colors and styles
 - **Inline image display** — image-heavy pages render as ANSI half-block art in any true-color terminal (macOS Terminal.app, iTerm2, etc.); iTerm2 and Kitty get native high-quality protocol rendering
+- **Inline image view for any page** — press `i` to rasterize and view the current page as an image regardless of content type; useful for diagrams, math, and complex layouts
 - **OCR fallback** — scanned/image-only PDFs are processed with macOS Vision framework via `ocrmac` (no Tesseract binary required)
 - **Interactive table of contents** — arrow-key navigation with smooth in-place redraws, no screen flashing
 - **Full-text search** — search across all pages with `n`/`N` to jump between matches, highlighted in page text
@@ -104,7 +105,8 @@ ln -s "$(pwd)/pdf" /usr/local/bin/pdf
 | `/` | Search |
 | `n` | Next search match |
 | `N` | Previous search match |
-| `v` | Open current image page in macOS Preview (full resolution) |
+| `i` | View current page as inline image |
+| `v` | Open current page in macOS Preview at full resolution |
 | `q` | Quit |
 
 ### Table of Contents
@@ -127,22 +129,26 @@ Pages are parsed with PyMuPDF's `get_text("dict")` which returns font metadata p
 - **Headings** — spans whose font size is ≥ 1.2× the body font size
 - **Bold / italic** — font flags bitmask (bits 16 and 2) or font name keywords
 - **Monospaced / code blocks** — font flags bit 8 or font names containing `mono`, `courier`, `code`, etc.
-- **Garbage spans** — sub-1pt spans (embedded font data) are filtered out
+- **Garbage spans** — sub-1pt spans (embedded font data) and spans where fewer than 50% of characters are printable are filtered out. Non-printable control characters within otherwise readable spans are also stripped before display.
 
-Lines within prose blocks are reflowed (joined with spaces, hyphenation preserved). Lines within monospaced blocks are preserved exactly as-is.
+Body font size is computed from spans ≥ 9pt to prevent footnotes and figure labels from skewing the heading detection threshold. Lines within prose blocks are reflowed (joined with spaces, hyphenation preserved). Lines within monospaced blocks are preserved exactly as-is.
 
 ### Image rendering
 
 Pages are classified as image-heavy if:
-- Image coverage > 70% of page area (always renders as image — handles photography books with captions), or
+- Image coverage > 70% of page area (always renders as image — handles photography books where full-page photos appear alongside substantial body text), or
 - Image coverage > 45% **and** text is sparse (< 50 characters)
+
+When a page is image-heavy and also contains more than 300 characters of body text (e.g. photography books with captions), both the image and the text are shown.
 
 Image-heavy pages are rasterized at 200 DPI and displayed via:
 1. **Kitty graphics protocol** — if `KITTY_WINDOW_ID` or `TERM=xterm-kitty`
 2. **iTerm2 inline images** — if `TERM_PROGRAM=iTerm.app` or `WezTerm`/`Hyper`
 3. **ANSI half-block art** — universal fallback using `▀` with 24-bit fg/bg colors, scales to fit terminal width and height
 
-Press `v` on any image page to open it in macOS Preview at full resolution.
+Press `i` on any page to view it rasterized as an inline image — useful when text extraction is poor (complex diagrams, vector graphics with custom font encodings, math-heavy pages). Press any key to return to the text view.
+
+Press `v` on any page to open it in macOS Preview at full resolution.
 
 ### OCR
 
