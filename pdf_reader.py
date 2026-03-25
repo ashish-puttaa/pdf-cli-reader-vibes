@@ -271,8 +271,18 @@ def styled_page_text(page):
 
 
 def _is_readable(text):
-    """True if the text contains at least one printable non-space character."""
-    return any(c.isprintable() and not c.isspace() for c in text)
+    """True if the majority of characters are printable non-space characters.
+
+    Requiring >50% (not just any one) filters out spans that are mostly
+    control characters — e.g. PDF image labels encoded with non-standard
+    font mappings (bytes like \\x14\\x15\\x1b appear alongside one printable
+    char, so the old 'any' check wrongly passed them through, skewing the
+    body-size calculation and rendering garbage in the output).
+    """
+    if not text:
+        return False
+    printable = sum(1 for c in text if c.isprintable() and not c.isspace())
+    return printable > 0 and printable / len(text) > 0.5
 
 def _span_style(is_heading, is_bold, is_italic, size, body_size, is_mono=False):
     parts = []
