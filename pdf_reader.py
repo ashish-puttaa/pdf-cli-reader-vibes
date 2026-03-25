@@ -542,29 +542,16 @@ def _progress_bar(current, total, width=36):
     filled = int(width * pct)
     return "█" * filled + "░" * (width - filled)
 
-def _render_header(book_title, chapter, page_num, total, pos, set_size, search_query, search_results):
-    """Structured header: title · chapter on line 1, progress bar on line 2."""
+def _render_header(book_title, chapter, search_query, search_results):
+    """Structured header: title · chapter, and active search indicator."""
     body = Text()
 
-    # ── row 1: book title + chapter ──────────────────────────────────────────
     short_title = book_title[:55] if book_title else "PDF Reader"
     body.append(f"  {short_title}", style="bold white")
     if chapter:
         body.append("  ╌  ", style="dim")
-        body.append(chapter[:50], style="bright_cyan")   # cyan was ~4:1; bright_cyan ~9:1
-    body.append("\n")
+        body.append(chapter[:50], style="bright_cyan")
 
-    # ── row 2: progress bar + page counter ───────────────────────────────────
-    bar_width = max(20, min(40, console.width - 40))
-    bar = _progress_bar(page_num, total, bar_width)
-    pct = int(page_num / total * 100) if total else 0
-    body.append(f"  {bar}", style="dodger_blue2")       # blue was ~2.6:1; dodger_blue2 ~4.5:1
-    body.append(f"  Page {page_num} / {total}", style="bold")
-    body.append(f"  {pct}%", style="dim")
-    if set_size != total:
-        body.append(f"  [{pos + 1} of {set_size} selected]", style="dim")
-
-    # ── search indicator ─────────────────────────────────────────────────────
     if search_query:
         n = len(search_results)
         body.append(f"  ·  🔍 '{search_query}'", style="bright_yellow")
@@ -573,8 +560,8 @@ def _render_header(book_title, chapter, page_num, total, pos, set_size, search_q
     return Panel(body, box=rich_box.HORIZONTALS, border_style="blue", padding=(0, 0))
 
 
-def _render_footer(has_toc, has_search, search_active, is_image_page=False):
-    """Compact shortcut bar shown at the bottom of every page."""
+def _render_footer(has_toc, has_search, search_active, page_num, total, pos, set_size, is_image_page=False):
+    """Compact shortcut bar with page counter shown at the bottom of every page."""
 
     items = [
         ("SPACE/→", "next"),
@@ -591,11 +578,22 @@ def _render_footer(has_toc, has_search, search_active, is_image_page=False):
     items.append(("v", "open in Preview"))
     items.append(("q", "quit"))
 
+    bar_width = max(10, min(30, console.width - 80))
+    bar = _progress_bar(page_num, total, bar_width)
+    pct = int(page_num / total * 100) if total else 0
+
     row = Text()
     row.append("  ")
     for key, desc in items:
         row.append(f" {key} ", style="bold black on white")
         row.append(f" {desc}  ", style="dim")
+
+    row.append("  ")
+    row.append(f"{bar}", style="dodger_blue2")
+    row.append(f"  {page_num} / {total}", style="bold")
+    row.append(f"  {pct}%", style="dim")
+    if set_size != total:
+        row.append(f"  [{pos + 1}/{set_size}]", style="dim")
 
     return Panel(row, box=rich_box.HORIZONTALS, border_style="dim blue", padding=(0, 0))
 
@@ -628,12 +626,7 @@ def _interactive(doc, pdf_path, page_indices, total, ocr, ocr_threshold, can_sho
         console.clear()
 
         # ── header ───────────────────────────────────────────────────────────
-        console.print(_render_header(
-            book_title, chapter,
-            page_num=i + 1, total=total,
-            pos=pos, set_size=len(page_indices),
-            search_query=search_query, search_results=search_results,
-        ))
+        console.print(_render_header(book_title, chapter, search_query, search_results))
 
         # ── content ──────────────────────────────────────────────────────────
         with Live(Spinner("dots", text=" Loading…"), console=console, transient=True):
@@ -667,8 +660,12 @@ def _interactive(doc, pdf_path, page_indices, total, ocr, ocr_threshold, can_sho
 
         # ── footer ───────────────────────────────────────────────────────────
         console.print()
-        console.print(_render_footer(has_toc, bool(search_results), bool(search_query),
-                                     is_image_page=(ctype == "image")))
+        console.print(_render_footer(
+            has_toc, bool(search_results), bool(search_query),
+            page_num=i + 1, total=total,
+            pos=pos, set_size=len(page_indices),
+            is_image_page=(ctype == "image"),
+        ))
 
         # ── key navigation ───────────────────────────────────────────────────
         while True:
@@ -770,12 +767,7 @@ def _interactive(doc, pdf_path, page_indices, total, ocr, ocr_threshold, can_sho
             # Inline image view of the current page
             elif ch == "i":
                 console.clear()
-                console.print(_render_header(
-                    book_title, chapter,
-                    page_num=i + 1, total=total,
-                    pos=pos, set_size=len(page_indices),
-                    search_query=search_query, search_results=search_results,
-                ))
+                console.print(_render_header(book_title, chapter, search_query, search_results))
                 with Live(Spinner("dots", text=" Rendering…"), console=console, transient=True):
                     img_bytes = content if ctype == "image" else render_page_image(doc[i])
                 display_image(img_bytes)
