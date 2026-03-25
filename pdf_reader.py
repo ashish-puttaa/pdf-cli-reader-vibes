@@ -189,7 +189,13 @@ def styled_page_text(page):
         for span in line["spans"]
         if span["size"] >= 1 and _is_readable(span["text"])
     ]
-    body_size = _most_common(sizes) if sizes else 12
+    # Restrict to >=9pt for body-size voting: footnotes and figure labels
+    # (typically 7–8pt) can outnumber body spans on figure-heavy pages,
+    # causing body_size to be underestimated and body text to appear as headings.
+    # Academic papers (e.g. chord_sigcomm) genuinely use 9pt body text, so 9
+    # is the safe lower bound.  Fall back to the full list if nothing qualifies.
+    size_candidates = [s for s in sizes if s >= 9] or sizes
+    body_size = _most_common(size_candidates) if size_candidates else 12
 
     result = Text()
     first_block = True
@@ -629,6 +635,17 @@ def _interactive(doc, pdf_path, page_indices, total, ocr, ocr_threshold, can_sho
 
         if ctype == "image":
             display_image(content)
+            # Some books (photography, design) have full-page images that also
+            # carry substantial body text overlaid or alongside the photo.
+            # Render that text below the image so it isn't silently lost.
+            page_obj = doc[i]
+            if len(page_obj.get_text("text").strip()) > 300:
+                page_text = styled_page_text(page_obj)
+                if page_text.plain.strip():
+                    if search_query:
+                        page_text.highlight_words([search_query],
+                                                  style="bold black on bright_yellow")
+                    console.print(Padding(page_text, (1, 0, 0, 3)))
         elif ctype == "rich":
             if search_query:
                 content.highlight_words([search_query], style="bold black on bright_yellow")
